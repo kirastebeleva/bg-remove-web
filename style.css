@@ -9,7 +9,9 @@
   --danger: #ff5a5a;
 }
 
-* { box-sizing: border-box; }
+* {
+  box-sizing: border-box;
+}
 
 body {
   margin: 0;
@@ -24,8 +26,15 @@ body {
   padding: 28px 16px 60px;
 }
 
-h1 { margin: 0 0 6px; font-size: 28px; }
-.sub { margin: 0 0 18px; color: var(--muted); }
+h1 {
+  margin: 0 0 6px;
+  font-size: 28px;
+}
+
+.sub {
+  margin: 0 0 18px;
+  color: var(--muted);
+}
 
 .card {
   border: 1px solid var(--border);
@@ -34,7 +43,10 @@ h1 { margin: 0 0 6px; font-size: 28px; }
   padding: 16px;
 }
 
-.file input { display: none; }
+.file input {
+  display: none;
+}
+
 .file span {
   display: inline-block;
   padding: 10px 12px;
@@ -76,7 +88,9 @@ button:disabled {
   color: var(--muted);
 }
 
-.status.error { color: var(--danger); }
+.status.error {
+  color: var(--danger);
+}
 
 .grid {
   display: grid;
@@ -86,7 +100,9 @@ button:disabled {
 }
 
 @media (min-width: 840px) {
-  .grid { grid-template-columns: 1fr 1fr; }
+  .grid {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .preview {
