@@ -1,3 +1,4 @@
+import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm";
 const fileInput = document.getElementById("fileInput");
 const removeBtn = document.getElementById("removeBtn");
 const downloadBtn = document.getElementById("downloadBtn");
@@ -81,9 +82,32 @@ fileInput.addEventListener("change", async () => {
 });
 
 removeBtn.addEventListener("click", async () => {
-  // Placeholder: Step 3 will implement real background removal
+  if (!originalFile) return;
+
   resetResult();
-  setStatus("Background removal is not connected yet (next step).", true);
+  removeBtn.disabled = true;
+
+  try {
+    setStatus("Removing background...");
+
+    const result = await removeBackground(originalFile, {
+      output: {
+        format: "image/png"
+      }
+    });
+
+    resultBlob = result;
+    resultObjectUrl = URL.createObjectURL(resultBlob);
+    afterImg.src = resultObjectUrl;
+
+    downloadBtn.disabled = false;
+    setStatus("Done.");
+  } catch (e) {
+    console.error(e);
+    setStatus("Failed to remove background.", true);
+  } finally {
+    removeBtn.disabled = false;
+  }
 });
 
 downloadBtn.addEventListener("click", () => {
