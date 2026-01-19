@@ -1,2 +1,2 @@
-# bg-remove-web
-For pet project about bg remove
+# Background Remover Web
+Simple one-page web app that removes image background in the browser.
