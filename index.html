@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Background Remover</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Background Remover</h1>
+      <p class="sub">Upload an image → remove background → download PNG</p>
+
+      <section class="card">
+        <label class="file">
+          <input id="fileInput" type="file" accept="image/*" />
+          <span>Select image</span>
+        </label>
+
+        <div class="row">
+          <button id="removeBtn" disabled>Remove background</button>
+          <button id="downloadBtn" disabled>Download PNG</button>
+        </div>
+
+        <p id="status" class="status"></p>
+
+        <div class="grid">
+          <div>
+            <h3>Original</h3>
+            <div class="preview">
+              <img id="beforeImg" alt="" />
+            </div>
+          </div>
+
+          <div>
+            <h3>Result (PNG)</h3>
+            <div class="preview checker">
+              <img id="afterImg" alt="" />
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <footer class="footer">
+        <small>
+          Background removal powered by open-source software (AGPL-3.0).
+        </small>
+      </footer>
+    </main>
+
+    <!-- We'll add the processing logic in main.js -->
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
+Нажми Commit changes.
+
+2.2. Создай файл style.css
+Add file → Create new file
+
+имя: style.css
+
+вставь:
+
+css
+Копировать код
+:root {
+  --bg: #0b0c10;
+  --card: #14161a;
+  --text: #e8e8e8;
+  --muted: #a9b0bd;
+  --border: #2a2f3a;
+  --btn: #2b6cff;
+  --btn2: #2a2f3a;
+  --danger: #ff5a5a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.container {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 28px 16px 60px;
+}
+
+h1 { margin: 0 0 6px; font-size: 28px; }
+.sub { margin: 0 0 18px; color: var(--muted); }
+
+.card {
+  border: 1px solid var(--border);
+  background: var(--card);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+.file input { display: none; }
+.file span {
+  display: inline-block;
+  padding: 10px 12px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--btn2);
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#removeBtn:not(:disabled) {
+  background: var(--btn);
+  border-color: transparent;
+}
+
+.status {
+  margin: 12px 0 0;
+  min-height: 18px;
+  color: var(--muted);
+}
+
+.status.error { color: var(--danger); }
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+@media (min-width: 840px) {
+  .grid { grid-template-columns: 1fr 1fr; }
+}
+
+.preview {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0f1115;
+  height: 340px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview img {
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+.checker {
+  background-image:
+    linear-gradient(45deg, #222 25%, transparent 25%),
+    linear-gradient(-45deg, #222 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #222 75%),
+    linear-gradient(-45deg, transparent 75%, #222 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+.footer {
+  margin-top: 14px;
+  color: var(--muted);
+}
