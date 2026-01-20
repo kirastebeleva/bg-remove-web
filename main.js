@@ -23,9 +23,9 @@ let segmenterPromise = null;
 function getSegmenter() {
   if (!segmenterPromise) {
     segmenterPromise = pipeline(
-      "background-removal",
-      "Xenova/modnet",
-      { quantized: true }
+      "image-segmentation",
+      "BritishWerewolf/U-2-Net",
+      { quantized: false }
     );
   }
   return segmenterPromise;
@@ -300,7 +300,7 @@ removeBtn.addEventListener("click", async () => {
   let bitmap = null;
 
   try {
-    setStatus("Loading MODNet model...");
+    setStatus("Loading U-2-Net model...");
     const mask = await getForegroundMask(originalObjectUrl);
     setStatus("Removing background...");
 
