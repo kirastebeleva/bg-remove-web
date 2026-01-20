@@ -1,4 +1,9 @@
-import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 1;
+env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/";
 const fileInput = document.getElementById("fileInput");
 const removeBtn = document.getElementById("removeBtn");
 const downloadBtn = document.getElementById("downloadBtn");
@@ -13,6 +18,207 @@ let resultObjectUrl = null;
 
 const MAX_MB = 8;                // easy anti-abuse
 const MAX_SIDE_PX = 2500;        // easy anti-abuse
+let segmenterPromise = null;
+
+function getSegmenter() {
+  if (!segmenterPromise) {
+    segmenterPromise = pipeline("image-segmentation", "Xenova/inspyrenet");
+  }
+  return segmenterPromise;
+}
+
+function getSampleMax(values) {
+  if (!values?.length) return 0;
+  const step = Math.max(1, Math.floor(values.length / 2048));
+  let maxValue = 0;
+  for (let i = 0; i < values.length; i += step) {
+    const value = values[i];
+    if (value > maxValue) maxValue = value;
+    if (maxValue > 1) break;
+  }
+  return maxValue;
+}
+
+function clampByte(value) {
+  return Math.max(0, Math.min(255, Math.round(value)));
+}
+
+function rawMaskToImageData(raw, width, height, channels) {
+  const totalPixels = width * height;
+  const inferred = channels ?? (raw.length % totalPixels === 0 ? raw.length / totalPixels : 1);
+  const channelCount = Number.isInteger(inferred) ? inferred : 1;
+  const data = new Uint8ClampedArray(totalPixels * 4);
+  const scale = getSampleMax(raw) <= 1 ? 255 : 1;
+
+  if (channelCount === 1) {
+    for (let i = 0; i < totalPixels; i += 1) {
+      const value = clampByte(raw[i] * scale);
+      const idx = i * 4;
+      data[idx] = value;
+      data[idx + 1] = value;
+      data[idx + 2] = value;
+      data[idx + 3] = value;
+    }
+    return new ImageData(data, width, height);
+  }
+
+  if (channelCount === 2) {
+    for (let i = 0; i < totalPixels; i += 1) {
+      const idx = i * 4;
+      const rawIdx = i * 2;
+      const value = clampByte(raw[rawIdx] * scale);
+      data[idx] = value;
+      data[idx + 1] = value;
+      data[idx + 2] = value;
+      data[idx + 3] = clampByte(raw[rawIdx + 1] * scale);
+    }
+    return new ImageData(data, width, height);
+  }
+
+  if (channelCount === 3) {
+    for (let i = 0; i < totalPixels; i += 1) {
+      const idx = i * 4;
+      const rawIdx = i * 3;
+      data[idx] = clampByte(raw[rawIdx] * scale);
+      data[idx + 1] = clampByte(raw[rawIdx + 1] * scale);
+      data[idx + 2] = clampByte(raw[rawIdx + 2] * scale);
+      data[idx + 3] = 255;
+    }
+    return new ImageData(data, width, height);
+  }
+
+  for (let i = 0; i < totalPixels; i += 1) {
+    const idx = i * 4;
+    const rawIdx = i * channelCount;
+    data[idx] = clampByte(raw[rawIdx] * scale);
+    data[idx + 1] = clampByte(raw[rawIdx + 1] * scale);
+    data[idx + 2] = clampByte(raw[rawIdx + 2] * scale);
+    data[idx + 3] = clampByte(raw[rawIdx + 3] * scale);
+  }
+  return new ImageData(data, width, height);
+}
+
+async function maskToImageData(mask) {
+  if (!mask) throw new Error("No mask returned.");
+  if (typeof ImageData !== "undefined" && mask instanceof ImageData) return mask;
+
+  if (typeof mask?.toCanvas === "function") {
+    const canvas = await Promise.resolve(mask.toCanvas());
+    const ctx = canvas.getContext("2d");
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  if (mask?.data && mask?.width && mask?.height) {
+    return rawMaskToImageData(mask.data, mask.width, mask.height, mask.channels);
+  }
+
+  if (typeof HTMLCanvasElement !== "undefined" && mask instanceof HTMLCanvasElement) {
+    const ctx = mask.getContext("2d");
+    return ctx.getImageData(0, 0, mask.width, mask.height);
+  }
+
+  if (typeof ImageBitmap !== "undefined" && mask instanceof ImageBitmap) {
+    const canvas = document.createElement("canvas");
+    canvas.width = mask.width;
+    canvas.height = mask.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(mask, 0, 0);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  if (typeof HTMLImageElement !== "undefined" && mask instanceof HTMLImageElement) {
+    const canvas = document.createElement("canvas");
+    canvas.width = mask.naturalWidth || mask.width;
+    canvas.height = mask.naturalHeight || mask.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(mask, 0, 0);
+    return ctx.getImageData(0, 0, canvas.width, canvas.height);
+  }
+
+  throw new Error("Unsupported mask format.");
+}
+
+function scaleImageData(imageData, width, height) {
+  if (imageData.width === width && imageData.height === height) {
+    return imageData;
+  }
+  const sourceCanvas = document.createElement("canvas");
+  sourceCanvas.width = imageData.width;
+  sourceCanvas.height = imageData.height;
+  const sourceCtx = sourceCanvas.getContext("2d");
+  sourceCtx.putImageData(imageData, 0, 0);
+
+  const targetCanvas = document.createElement("canvas");
+  targetCanvas.width = width;
+  targetCanvas.height = height;
+  const targetCtx = targetCanvas.getContext("2d");
+  targetCtx.drawImage(sourceCanvas, 0, 0, width, height);
+  return targetCtx.getImageData(0, 0, width, height);
+}
+
+function maskUsesAlpha(maskData) {
+  let minAlpha = 255;
+  let maxAlpha = 0;
+  for (let i = 3; i < maskData.length; i += 16) {
+    const alpha = maskData[i];
+    if (alpha < minAlpha) minAlpha = alpha;
+    if (alpha > maxAlpha) maxAlpha = alpha;
+    if (minAlpha === 0 && maxAlpha === 255) return true;
+  }
+  return maxAlpha !== minAlpha && !(minAlpha === 255 && maxAlpha === 255);
+}
+
+function canvasToBlob(canvas, type) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error("Failed to create PNG output."));
+        return;
+      }
+      resolve(blob);
+    }, type);
+  });
+}
+
+async function getForegroundMask(imageUrl) {
+  const segmenter = await getSegmenter();
+  const output = await segmenter(imageUrl);
+  if (Array.isArray(output)) {
+    if (!output.length) throw new Error("No foreground detected.");
+    const best = output.reduce((current, candidate) => (
+      candidate.score > (current?.score ?? 0) ? candidate : current
+    ), null);
+    return best?.mask ?? best;
+  }
+  return output?.mask ?? output;
+}
+
+async function applyMaskToFile(file, mask) {
+  const bitmap = await createImageBitmap(file);
+  const width = bitmap.width;
+  const height = bitmap.height;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const maskImageData = await maskToImageData(mask);
+  const scaledMask = scaleImageData(maskImageData, width, height);
+  const useAlpha = maskUsesAlpha(scaledMask.data);
+
+  for (let i = 0; i < imageData.data.length; i += 4) {
+    const alpha = useAlpha
+      ? scaledMask.data[i + 3]
+      : Math.round((scaledMask.data[i] + scaledMask.data[i + 1] + scaledMask.data[i + 2]) / 3);
+    imageData.data[i + 3] = alpha;
+  }
+
+  ctx.putImageData(imageData, 0, 0);
+  return canvasToBlob(canvas, "image/png");
+}
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text || "";
@@ -88,15 +294,11 @@ removeBtn.addEventListener("click", async () => {
   removeBtn.disabled = true;
 
   try {
+    setStatus("Loading InSPyReNet model...");
+    const mask = await getForegroundMask(originalObjectUrl);
     setStatus("Removing background...");
 
-    const result = await removeBackground(originalFile, {
-      output: {
-        format: "image/png"
-      }
-    });
-
-    resultBlob = result;
+    resultBlob = await applyMaskToFile(originalFile, mask);
     resultObjectUrl = URL.createObjectURL(resultBlob);
     afterImg.src = resultObjectUrl;
 
