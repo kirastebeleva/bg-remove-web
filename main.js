@@ -177,6 +177,20 @@ function tensorToMaskImageData(tensor) {
   return rawMaskToImageData(singleChannel, layout.width, layout.height, 1);
 }
 
+function pickBestOutputTensor(outputMap, outputNames) {
+  let bestTensor = null;
+  for (const name of outputNames) {
+    const tensor = outputMap[name];
+    if (!tensor?.data) continue;
+    if (!bestTensor || tensor.data.length > bestTensor.data.length) {
+      bestTensor = tensor;
+    }
+  }
+  if (bestTensor) return bestTensor;
+  const fallback = Object.values(outputMap).find((value) => value?.data);
+  return fallback ?? null;
+}
+
 function cropImageData(imageData, x, y, width, height) {
   if (x === 0 && y === 0 && width === imageData.width && height === imageData.height) {
     return imageData;
@@ -337,7 +351,8 @@ async function getForegroundMask(bitmap) {
   const { tensor, meta } = prepareInputTensor(bitmap);
   const feeds = { [session.inputNames[0]]: tensor };
   const outputMap = await session.run(feeds);
-  const outputTensor = outputMap[session.outputNames[0]];
+  const outputTensor = pickBestOutputTensor(outputMap, session.outputNames);
+  if (!outputTensor) throw new Error("Model returned no mask data.");
   const maskImageData = tensorToMaskImageData(outputTensor);
   const croppedMask = cropImageData(
     maskImageData,
