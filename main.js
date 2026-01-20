@@ -49,6 +49,31 @@ function clampByte(value) {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
+function getSampleRange(values) {
+  if (!values?.length) return { min: 0, max: 0 };
+  const step = Math.max(1, Math.floor(values.length / 2048));
+  let minValue = Number.POSITIVE_INFINITY;
+  let maxValue = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < values.length; i += step) {
+    const value = values[i];
+    if (value < minValue) minValue = value;
+    if (value > maxValue) maxValue = value;
+  }
+  if (!Number.isFinite(minValue)) minValue = 0;
+  if (!Number.isFinite(maxValue)) maxValue = 0;
+  return { min: minValue, max: maxValue };
+}
+
+function normalizeMaskValues(values) {
+  const { min, max } = getSampleRange(values);
+  if (min >= 0 && max <= 1) return values;
+  const normalized = new Float32Array(values.length);
+  for (let i = 0; i < values.length; i += 1) {
+    normalized[i] = 1 / (1 + Math.exp(-values[i]));
+  }
+  return normalized;
+}
+
 function drawBitmapToSquare(bitmap, size) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -147,7 +172,8 @@ function extractMaskChannel(values, layout) {
 function tensorToMaskImageData(tensor) {
   if (!tensor?.data || !tensor?.dims) throw new Error("Model returned no mask data.");
   const layout = getTensorLayout(tensor.dims);
-  const singleChannel = extractMaskChannel(tensor.data, layout);
+  const normalized = normalizeMaskValues(tensor.data);
+  const singleChannel = extractMaskChannel(normalized, layout);
   return rawMaskToImageData(singleChannel, layout.width, layout.height, 1);
 }
 
