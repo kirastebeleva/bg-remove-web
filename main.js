@@ -17,7 +17,7 @@ let resultObjectUrl = null;
 
 const MAX_MB = 8;                // easy anti-abuse
 const MAX_SIDE_PX = 2500;        // easy anti-abuse
-const MODEL_URL = "https://huggingface.co/BritishWerewolf/U-2-Net/resolve/main/onnx/model.onnx";
+const MODEL_URL = "https://huggingface.co/BritishWerewolf/U-2-Netp/resolve/main/onnx/model.onnx";
 const MODEL_INPUT_SIZE = 320;
 const MODEL_MEAN = [0.485, 0.456, 0.406];
 const MODEL_STD = [0.229, 0.224, 0.225];
@@ -423,7 +423,7 @@ removeBtn.addEventListener("click", async () => {
   let bitmap = null;
 
   try {
-    setStatus("Loading U-2-Net model...");
+    setStatus("Loading U-2-Netp model...");
     bitmap = await createImageBitmap(originalFile);
     const mask = await getForegroundMask(bitmap);
     setStatus("Removing background...");
