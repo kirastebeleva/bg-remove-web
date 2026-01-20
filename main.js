@@ -1,8 +1,9 @@
-import * as ort from "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/esm/ort.min.js";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
 
-ort.env.wasm.numThreads = 1;
-ort.env.wasm.simd = true;
-ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.23.2/dist/";
+env.allowLocalModels = false;
+env.useBrowserCache = true;
+env.backends.onnx.wasm.numThreads = 1;
+env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/";
 const fileInput = document.getElementById("fileInput");
 const removeBtn = document.getElementById("removeBtn");
 const downloadBtn = document.getElementById("downloadBtn");
@@ -17,20 +18,17 @@ let resultObjectUrl = null;
 
 const MAX_MB = 8;                // easy anti-abuse
 const MAX_SIDE_PX = 2500;        // easy anti-abuse
-const MODEL_URL = "https://huggingface.co/OS-Software/InSPyReNet-SwinB-Plus-Ultra-ONNX/resolve/main/onnx/model.onnx";
-const MODEL_INPUT_SIZE = 1024;
-const MODEL_MEAN = [0.485, 0.456, 0.406];
-const MODEL_STD = [0.229, 0.224, 0.225];
-let sessionPromise = null;
+let segmenterPromise = null;
 
-function getSession() {
-  if (!sessionPromise) {
-    sessionPromise = ort.InferenceSession.create(MODEL_URL, {
-      executionProviders: ["wasm"],
-      graphOptimizationLevel: "all"
-    });
+function getSegmenter() {
+  if (!segmenterPromise) {
+    segmenterPromise = pipeline(
+      "background-removal",
+      "Xenova/modnet",
+      { quantized: true }
+    );
   }
-  return sessionPromise;
+  return segmenterPromise;
 }
 
 function getSampleMax(values) {
@@ -47,149 +45,6 @@ function getSampleMax(values) {
 
 function clampByte(value) {
   return Math.max(0, Math.min(255, Math.round(value)));
-}
-
-function getSampleRange(values) {
-  if (!values?.length) return { min: 0, max: 0 };
-  const step = Math.max(1, Math.floor(values.length / 2048));
-  let minValue = Number.POSITIVE_INFINITY;
-  let maxValue = Number.NEGATIVE_INFINITY;
-  for (let i = 0; i < values.length; i += step) {
-    const value = values[i];
-    if (value < minValue) minValue = value;
-    if (value > maxValue) maxValue = value;
-  }
-  if (!Number.isFinite(minValue)) minValue = 0;
-  if (!Number.isFinite(maxValue)) maxValue = 0;
-  return { min: minValue, max: maxValue };
-}
-
-function normalizeMaskValues(values) {
-  const { min, max } = getSampleRange(values);
-  if (min >= 0 && max <= 1) return values;
-  const normalized = new Float32Array(values.length);
-  for (let i = 0; i < values.length; i += 1) {
-    normalized[i] = 1 / (1 + Math.exp(-values[i]));
-  }
-  return normalized;
-}
-
-function drawBitmapToSquare(bitmap, size) {
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d");
-  ctx.fillStyle = "black";
-  ctx.fillRect(0, 0, size, size);
-
-  const scale = Math.min(size / bitmap.width, size / bitmap.height);
-  const drawWidth = Math.max(1, Math.round(bitmap.width * scale));
-  const drawHeight = Math.max(1, Math.round(bitmap.height * scale));
-  const offsetX = Math.floor((size - drawWidth) / 2);
-  const offsetY = Math.floor((size - drawHeight) / 2);
-  ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, offsetX, offsetY, drawWidth, drawHeight);
-
-  return { canvas, offsetX, offsetY, drawWidth, drawHeight };
-}
-
-function imageDataToTensor(imageData) {
-  const { data, width, height } = imageData;
-  const size = width * height;
-  const floatData = new Float32Array(3 * size);
-  for (let i = 0; i < size; i += 1) {
-    const idx = i * 4;
-    const r = data[idx] / 255;
-    const g = data[idx + 1] / 255;
-    const b = data[idx + 2] / 255;
-    floatData[i] = (r - MODEL_MEAN[0]) / MODEL_STD[0];
-    floatData[i + size] = (g - MODEL_MEAN[1]) / MODEL_STD[1];
-    floatData[i + size * 2] = (b - MODEL_MEAN[2]) / MODEL_STD[2];
-  }
-  return new ort.Tensor("float32", floatData, [1, 3, height, width]);
-}
-
-function prepareInputTensor(bitmap) {
-  const { canvas, offsetX, offsetY, drawWidth, drawHeight } = drawBitmapToSquare(
-    bitmap,
-    MODEL_INPUT_SIZE
-  );
-  const ctx = canvas.getContext("2d");
-  const imageData = ctx.getImageData(0, 0, MODEL_INPUT_SIZE, MODEL_INPUT_SIZE);
-  const tensor = imageDataToTensor(imageData);
-  return {
-    tensor,
-    meta: {
-      offsetX,
-      offsetY,
-      drawWidth,
-      drawHeight,
-      originalWidth: bitmap.width,
-      originalHeight: bitmap.height
-    }
-  };
-}
-
-function getTensorLayout(dims) {
-  if (dims.length === 4) {
-    if (dims[1] <= 4) {
-      return { channels: dims[1], height: dims[2], width: dims[3], isNHWC: false };
-    }
-    if (dims[3] <= 4) {
-      return { channels: dims[3], height: dims[1], width: dims[2], isNHWC: true };
-    }
-    return { channels: dims[1], height: dims[2], width: dims[3], isNHWC: false };
-  }
-  if (dims.length === 3) {
-    return { channels: dims[0], height: dims[1], width: dims[2], isNHWC: false };
-  }
-  if (dims.length === 2) {
-    return { channels: 1, height: dims[0], width: dims[1], isNHWC: false };
-  }
-  throw new Error("Unexpected mask dimensions.");
-}
-
-function extractMaskChannel(values, layout) {
-  if (layout.channels === 1) return values;
-  const channelIndex = layout.channels === 2 ? 1 : 0;
-  const size = layout.width * layout.height;
-  const extracted = new Float32Array(size);
-  if (layout.isNHWC) {
-    for (let i = 0; i < size; i += 1) {
-      extracted[i] = values[i * layout.channels + channelIndex];
-    }
-    return extracted;
-  }
-  const offset = channelIndex * size;
-  for (let i = 0; i < size; i += 1) {
-    extracted[i] = values[offset + i];
-  }
-  return extracted;
-}
-
-function tensorToMaskImageData(tensor) {
-  if (!tensor?.data || !tensor?.dims) throw new Error("Model returned no mask data.");
-  const layout = getTensorLayout(tensor.dims);
-  const normalized = normalizeMaskValues(tensor.data);
-  const singleChannel = extractMaskChannel(normalized, layout);
-  return rawMaskToImageData(singleChannel, layout.width, layout.height, 1);
-}
-
-function cropImageData(imageData, x, y, width, height) {
-  if (x === 0 && y === 0 && width === imageData.width && height === imageData.height) {
-    return imageData;
-  }
-  const sourceCanvas = document.createElement("canvas");
-  sourceCanvas.width = imageData.width;
-  sourceCanvas.height = imageData.height;
-  const sourceCtx = sourceCanvas.getContext("2d");
-  sourceCtx.putImageData(imageData, 0, 0);
-
-  const targetCanvas = document.createElement("canvas");
-  targetCanvas.width = width;
-  targetCanvas.height = height;
-  const targetCtx = targetCanvas.getContext("2d");
-  targetCtx.drawImage(sourceCanvas, x, y, width, height, 0, 0, width, height);
-  return targetCtx.getImageData(0, 0, width, height);
 }
 
 function rawMaskToImageData(raw, width, height, channels) {
@@ -329,22 +184,14 @@ function canvasToBlob(canvas, type) {
   });
 }
 
-async function getForegroundMask(bitmap) {
-  const session = await getSession();
-  const { tensor, meta } = prepareInputTensor(bitmap);
-  const feeds = { [session.inputNames[0]]: tensor };
-  const outputMap = await session.run(feeds);
-  const outputName = session.outputNames[0];
-  const outputTensor = outputMap[outputName];
-  const maskImageData = tensorToMaskImageData(outputTensor);
-  const croppedMask = cropImageData(
-    maskImageData,
-    meta.offsetX,
-    meta.offsetY,
-    meta.drawWidth,
-    meta.drawHeight
-  );
-  return scaleImageData(croppedMask, meta.originalWidth, meta.originalHeight);
+async function getForegroundMask(imageUrl) {
+  const segmenter = await getSegmenter();
+  const output = await segmenter(imageUrl);
+  if (Array.isArray(output)) {
+    if (!output.length) throw new Error("No foreground detected.");
+    return output[0]?.mask ?? output[0];
+  }
+  return output?.mask ?? output;
 }
 
 async function applyMaskToBitmap(bitmap, mask) {
@@ -447,11 +294,11 @@ removeBtn.addEventListener("click", async () => {
   let bitmap = null;
 
   try {
-    setStatus("Loading InSPyReNet model...");
-    bitmap = await createImageBitmap(originalFile);
-    const mask = await getForegroundMask(bitmap);
+    setStatus("Loading MODNet model...");
+    const mask = await getForegroundMask(originalObjectUrl);
     setStatus("Removing background...");
 
+    bitmap = await createImageBitmap(originalFile);
     resultBlob = await applyMaskToBitmap(bitmap, mask);
     resultObjectUrl = URL.createObjectURL(resultBlob);
     afterImg.src = resultObjectUrl;
