@@ -23,7 +23,7 @@ let segmenterPromise = null;
 function getSegmenter() {
   if (!segmenterPromise) {
     segmenterPromise = pipeline(
-      "background-removal",
+      "image-segmentation",
       "Xenova/modnet",
       { quantized: true }
     );
@@ -189,7 +189,10 @@ async function getForegroundMask(imageUrl) {
   const output = await segmenter(imageUrl);
   if (Array.isArray(output)) {
     if (!output.length) throw new Error("No foreground detected.");
-    return output[0]?.mask ?? output[0];
+    const best = output.reduce((current, candidate) => (
+      candidate.score > (current?.score ?? 0) ? candidate : current
+    ), null);
+    return best?.mask ?? best;
   }
   return output?.mask ?? output;
 }
