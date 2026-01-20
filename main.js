@@ -22,7 +22,11 @@ let segmenterPromise = null;
 
 function getSegmenter() {
   if (!segmenterPromise) {
-    segmenterPromise = pipeline("image-segmentation", "Xenova/inspyrenet");
+    segmenterPromise = pipeline(
+      "image-segmentation",
+      "OS-Software/InSPyReNet-SwinB-Plus-Ultra-ONNX",
+      { quantized: false }
+    );
   }
   return segmenterPromise;
 }
@@ -306,7 +310,7 @@ removeBtn.addEventListener("click", async () => {
     setStatus("Done.");
   } catch (e) {
     console.error(e);
-    setStatus("Failed to remove background.", true);
+    setStatus(e?.message || "Failed to remove background.", true);
   } finally {
     removeBtn.disabled = false;
   }
