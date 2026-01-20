@@ -1,9 +1,9 @@
-import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2";
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
 
 env.allowLocalModels = false;
 env.useBrowserCache = true;
 env.backends.onnx.wasm.numThreads = 1;
-env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.14.0/dist/";
+env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.0/dist/";
 const fileInput = document.getElementById("fileInput");
 const removeBtn = document.getElementById("removeBtn");
 const downloadBtn = document.getElementById("downloadBtn");
@@ -23,7 +23,7 @@ let segmenterPromise = null;
 function getSegmenter() {
   if (!segmenterPromise) {
     segmenterPromise = pipeline(
-      "image-segmentation",
+      "background-removal",
       "Xenova/modnet",
       { quantized: true }
     );
@@ -189,9 +189,12 @@ async function getForegroundMask(imageUrl) {
   const output = await segmenter(imageUrl);
   if (Array.isArray(output)) {
     if (!output.length) throw new Error("No foreground detected.");
-    const best = output.reduce((current, candidate) => (
-      candidate.score > (current?.score ?? 0) ? candidate : current
-    ), null);
+    const hasScores = output.some((item) => typeof item?.score === "number");
+    const best = hasScores
+      ? output.reduce((current, candidate) => (
+        (candidate.score ?? -Infinity) > (current.score ?? -Infinity) ? candidate : current
+      ), output[0])
+      : output[0];
     return best?.mask ?? best;
   }
   return output?.mask ?? output;
