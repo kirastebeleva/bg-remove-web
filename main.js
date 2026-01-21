@@ -21,6 +21,7 @@ const MODEL_URL = "https://huggingface.co/BritishWerewolf/U-2-Netp/resolve/main/
 const MODEL_INPUT_SIZE = 320;
 const MODEL_MEAN = [0.485, 0.456, 0.406];
 const MODEL_STD = [0.229, 0.224, 0.225];
+const OUTPUT_COMPOSITE_NAME = "1959";
 let sessionPromise = null;
 
 function getSession() {
@@ -64,13 +65,40 @@ function getSampleRange(values) {
   return { min: minValue, max: maxValue };
 }
 
+function getFullRange(values) {
+  if (!values?.length) return { min: 0, max: 0 };
+  let minValue = Number.POSITIVE_INFINITY;
+  let maxValue = Number.NEGATIVE_INFINITY;
+  for (let i = 0; i < values.length; i += 1) {
+    const value = values[i];
+    if (value < minValue) minValue = value;
+    if (value > maxValue) maxValue = value;
+  }
+  if (!Number.isFinite(minValue)) minValue = 0;
+  if (!Number.isFinite(maxValue)) maxValue = 0;
+  return { min: minValue, max: maxValue };
+}
+
 function normalizeMaskValues(values) {
   const { min, max } = getSampleRange(values);
-  if (min >= 0 && max <= 1) return values;
-  const normalized = new Float32Array(values.length);
-  for (let i = 0; i < values.length; i += 1) {
-    normalized[i] = 1 / (1 + Math.exp(-values[i]));
+  let normalized = values;
+  if (min < 0 || max > 1) {
+    normalized = new Float32Array(values.length);
+    for (let i = 0; i < values.length; i += 1) {
+      normalized[i] = 1 / (1 + Math.exp(-values[i]));
+    }
   }
+
+  const range = getFullRange(normalized);
+  const span = range.max - range.min;
+  if (span > 0 && span < 0.15) {
+    const stretched = new Float32Array(normalized.length);
+    for (let i = 0; i < normalized.length; i += 1) {
+      stretched[i] = (normalized[i] - range.min) / span;
+    }
+    return stretched;
+  }
+
   return normalized;
 }
 
@@ -175,6 +203,28 @@ function tensorToMaskImageData(tensor) {
   const normalized = normalizeMaskValues(tensor.data);
   const singleChannel = extractMaskChannel(normalized, layout);
   return rawMaskToImageData(singleChannel, layout.width, layout.height, 1);
+}
+
+function pickBestOutputTensor(outputMap, outputNames) {
+  if (outputMap?.[OUTPUT_COMPOSITE_NAME]?.data) {
+    return outputMap[OUTPUT_COMPOSITE_NAME];
+  }
+
+  let bestTensor = null;
+  let bestScore = -Infinity;
+  for (const name of outputNames) {
+    const tensor = outputMap[name];
+    if (!tensor?.data) continue;
+    const { min, max } = getSampleRange(tensor.data);
+    const score = max - min;
+    if (score > bestScore) {
+      bestScore = score;
+      bestTensor = tensor;
+    }
+  }
+  if (bestTensor) return bestTensor;
+
+  return Object.values(outputMap).find((value) => value?.data) ?? null;
 }
 
 function pickBestOutputTensor(outputMap, outputNames) {
