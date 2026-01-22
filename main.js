@@ -1,6 +1,5 @@
 import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm";
 const fileInput = document.getElementById("fileInput");
-const removeBtn = document.getElementById("removeBtn");
 const downloadBtn = document.getElementById("downloadBtn");
 const statusEl = document.getElementById("status");
 const beforeImg = document.getElementById("beforeImg");
@@ -25,6 +24,7 @@ function resetResult() {
   resultObjectUrl = null;
   afterImg.src = "";
   downloadBtn.disabled = true;
+  downloadBtn.hidden = true;
 }
 
 function resetAll() {
@@ -33,7 +33,6 @@ function resetAll() {
   originalObjectUrl = null;
   beforeImg.src = "";
   resetResult();
-  removeBtn.disabled = true;
   setStatus("");
 }
 
@@ -73,22 +72,7 @@ fileInput.addEventListener("change", async () => {
     originalObjectUrl = URL.createObjectURL(file);
     beforeImg.src = originalObjectUrl;
 
-    removeBtn.disabled = false;
-    setStatus("Ready.");
-  } catch (e) {
-    setStatus(e.message || "Validation error.", true);
-    resetAll();
-  }
-});
-
-removeBtn.addEventListener("click", async () => {
-  if (!originalFile) return;
-
-  resetResult();
-  removeBtn.disabled = true;
-
-  try {
-    setStatus("Removing background...");
+    setStatus("Идет обработка изображения");
 
     const result = await removeBackground(originalFile, {
       output: {
@@ -101,12 +85,11 @@ removeBtn.addEventListener("click", async () => {
     afterImg.src = resultObjectUrl;
 
     downloadBtn.disabled = false;
+    downloadBtn.hidden = false;
     setStatus("Done.");
   } catch (e) {
     console.error(e);
-    setStatus("Failed to remove background.", true);
-  } finally {
-    removeBtn.disabled = false;
+    setStatus(e.message || "Validation error.", true);
   }
 });
 
