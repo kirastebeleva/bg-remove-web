@@ -9,6 +9,7 @@ let originalFile = null;
 let originalObjectUrl = null;
 let resultBlob = null;
 let resultObjectUrl = null;
+let processingToken = 0;
 
 const MAX_MB = 8;                // easy anti-abuse
 const MAX_SIDE_PX = 2500;        // easy anti-abuse
@@ -59,6 +60,34 @@ async function validateImage(file) {
   }
 }
 
+async function processImage(file) {
+  const token = ++processingToken;
+  resetResult();
+  setStatus("Идет обработка изображения");
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+
+  try {
+    const result = await removeBackground(file, {
+      output: {
+        format: "image/png"
+      }
+    });
+
+    if (token !== processingToken) return;
+    resultBlob = result;
+    resultObjectUrl = URL.createObjectURL(resultBlob);
+    afterImg.src = resultObjectUrl;
+    downloadBtn.disabled = false;
+    downloadBtn.hidden = false;
+    setStatus("Done.");
+  } catch (e) {
+    if (token !== processingToken) return;
+    console.error(e);
+    resetResult();
+    setStatus(e?.message || "Failed to remove background.", true);
+  }
+}
+
 fileInput.addEventListener("change", async () => {
   resetAll();
   const file = fileInput.files?.[0];
@@ -72,24 +101,11 @@ fileInput.addEventListener("change", async () => {
     originalObjectUrl = URL.createObjectURL(file);
     beforeImg.src = originalObjectUrl;
 
-    setStatus("Идет обработка изображения");
-
-    const result = await removeBackground(originalFile, {
-      output: {
-        format: "image/png"
-      }
-    });
-
-    resultBlob = result;
-    resultObjectUrl = URL.createObjectURL(resultBlob);
-    afterImg.src = resultObjectUrl;
-
-    downloadBtn.disabled = false;
-    downloadBtn.hidden = false;
-    setStatus("Done.");
+    await processImage(originalFile);
   } catch (e) {
     console.error(e);
-    setStatus(e.message || "Validation error.", true);
+    resetResult();
+    setStatus(e?.message || "Validation error.", true);
   }
 });
 
