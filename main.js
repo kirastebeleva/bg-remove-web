@@ -166,9 +166,8 @@ downloadBtn.addEventListener("click", () => {
   if (!resultBlob) return;
   const a = document.createElement("a");
   a.href = resultObjectUrl;
-  const baseName = originalFile?.name
-    ? originalFile.name.replace(/\.[^/.]+$/, "")
-    : "image";
+  const sourceName = originalFile?.name || fileInput.files?.[0]?.name || "image";
+  const baseName = sourceName.replace(/\.[^/.]+$/, "");
   a.download = `${baseName}_no_bg.png`;
   document.body.appendChild(a);
   a.click();
