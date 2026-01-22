@@ -123,6 +123,10 @@ fileInput.addEventListener("change", async () => {
   }
 });
 
+fileInput.addEventListener("click", () => {
+  fileInput.value = "";
+});
+
 downloadBtn.addEventListener("click", () => {
   if (!resultBlob) return;
   const a = document.createElement("a");
