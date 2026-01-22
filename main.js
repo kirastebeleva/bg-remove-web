@@ -82,6 +82,7 @@ async function processImage(file) {
 
   try {
     const removeBackground = await getRemoveBackground();
+    const preferGpu = typeof navigator !== "undefined" && "gpu" in navigator;
     const progressText = (key, current, total) => {
       if (token !== processingToken) return;
       if (!total) return;
@@ -90,15 +91,32 @@ async function processImage(file) {
         setStatus(`Идет обработка изображения (загрузка модели ${percent}%)`);
       }
     };
-    const result = await removeBackground(file, {
+    const baseConfig = {
       publicPath: "https://staticimgly.com/@imgly/background-removal-data/1.6.0/dist/",
       model: "isnet_quint8",
-      device: "cpu",
       progress: progressText,
       output: {
         format: "image/png"
       }
-    });
+    };
+    let result;
+    try {
+      result = await removeBackground(file, {
+        ...baseConfig,
+        device: preferGpu ? "gpu" : "cpu"
+      });
+    } catch (gpuError) {
+      if (token !== processingToken) return;
+      if (preferGpu) {
+        setStatus("Идет обработка изображения (CPU)");
+        result = await removeBackground(file, {
+          ...baseConfig,
+          device: "cpu"
+        });
+      } else {
+        throw gpuError;
+      }
+    }
 
     if (token !== processingToken) return;
     resultBlob = result;
