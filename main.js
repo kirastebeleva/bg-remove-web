@@ -1,4 +1,4 @@
-import { removeBackground } from "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm";
+let removeBackgroundFn = null;
 const fileInput = document.getElementById("fileInput");
 const downloadBtn = document.getElementById("downloadBtn");
 const statusEl = document.getElementById("status");
@@ -60,6 +60,19 @@ async function validateImage(file) {
   }
 }
 
+async function getRemoveBackground() {
+  if (!removeBackgroundFn) {
+    const module = await import(
+      "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.6.0/+esm"
+    );
+    if (!module?.removeBackground) {
+      throw new Error("Background remover failed to load.");
+    }
+    removeBackgroundFn = module.removeBackground;
+  }
+  return removeBackgroundFn;
+}
+
 async function processImage(file) {
   const token = ++processingToken;
   resetResult();
@@ -67,6 +80,7 @@ async function processImage(file) {
   await new Promise((resolve) => requestAnimationFrame(resolve));
 
   try {
+    const removeBackground = await getRemoveBackground();
     const result = await removeBackground(file, {
       output: {
         format: "image/png"
