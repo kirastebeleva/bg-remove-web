@@ -1,4 +1,5 @@
 let removeBackgroundFn = null;
+window.__bgAppLoaded = true;
 const fileInput = document.getElementById("fileInput");
 const downloadBtn = document.getElementById("downloadBtn");
 const statusEl = document.getElementById("status");
@@ -102,7 +103,7 @@ async function processImage(file) {
   }
 }
 
-fileInput.addEventListener("change", async () => {
+const handleFileSelection = async () => {
   resetAll();
   const file = fileInput.files?.[0];
   if (!file) return;
@@ -121,7 +122,10 @@ fileInput.addEventListener("change", async () => {
     resetResult();
     setStatus(e?.message || "Validation error.", true);
   }
-});
+};
+
+fileInput.addEventListener("change", handleFileSelection);
+fileInput.addEventListener("input", handleFileSelection);
 
 fileInput.addEventListener("click", () => {
   fileInput.value = "";
