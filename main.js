@@ -82,7 +82,19 @@ async function processImage(file) {
 
   try {
     const removeBackground = await getRemoveBackground();
+    const progressText = (key, current, total) => {
+      if (token !== processingToken) return;
+      if (!total) return;
+      const percent = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+      if (key?.startsWith("fetch:")) {
+        setStatus(`Идет обработка изображения (загрузка модели ${percent}%)`);
+      }
+    };
     const result = await removeBackground(file, {
+      publicPath: "https://staticimgly.com/@imgly/background-removal-data/1.6.0/dist/",
+      model: "isnet_quint8",
+      device: "cpu",
+      progress: progressText,
       output: {
         format: "image/png"
       }
