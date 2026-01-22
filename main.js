@@ -18,6 +18,7 @@ const MAX_SIDE_PX = 2500;        // easy anti-abuse
 function setStatus(text, isError = false) {
   statusEl.textContent = text || "";
   statusEl.classList.toggle("error", Boolean(isError));
+  statusEl.hidden = !text;
 }
 
 function resetResult() {
@@ -124,7 +125,7 @@ async function processImage(file) {
     afterImg.src = resultObjectUrl;
     downloadBtn.disabled = false;
     downloadBtn.hidden = false;
-    setStatus("Done.");
+    setStatus("");
   } catch (e) {
     if (token !== processingToken) return;
     console.error(e);
