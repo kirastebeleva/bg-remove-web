@@ -41,13 +41,13 @@
 
       <footer class="footer">
         <small>
-          Background removal powered by open-source software (AGPL-3.0).
+          Background removal powered by U^2-Net and onnxruntime-web (WebGPU/WASM).
         </small>
       </footer>
     </main>
 
     <script type="module">
-      import("./main.js?v=20260120-4").catch((e) => {
+      import("./main.js?v=20260126-1").catch((e) => {
         const statusEl = document.getElementById("status");
         if (statusEl) {
           statusEl.textContent = "Ошибка загрузки скрипта.";
